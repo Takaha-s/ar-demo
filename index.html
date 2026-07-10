@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>平面認識・動線可視化AR</title>
+    <title>家具＋生活動線可視化AR</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     <style>
@@ -13,15 +13,15 @@
   <body>
 
     <model-viewer 
-      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb" 
+      src="furniture.glb" 
       ar 
       ar-modes="webxr scene-viewer quick-look" 
       camera-controls 
       touch-action="none"
-      alt="ARテストオブジェクト">
+      alt="家具と動線バリア">
       
-      <button slot="ar-button" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: #3182ce; color: white; border: none; border-radius: 8px; font-size: 16px;">
-        部屋に配置する（AR起動）
+      <button slot="ar-button" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: #E53E3E; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold;">
+        部屋に家具を配置する
       </button>
 
     </model-viewer>
