@@ -2,35 +2,29 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>生活動線可視化ARプロトタイプ v2</title>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <title>平面認識・動線可視化AR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+    <style>
+      body { margin: 0; }
+      model-viewer { width: 100vw; height: 100vh; }
+    </style>
   </head>
+  <body>
 
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+    <model-viewer 
+      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb" 
+      ar 
+      ar-modes="webxr scene-viewer quick-look" 
+      camera-controls 
+      touch-action="none"
+      alt="ARテストオブジェクト">
       
-      <a-marker preset="hiro">
-        
-        <a-entity position="0 0 0">
-          
-          <a-box 
-            position="0 0.35 0" 
-            width="1.0" height="0.7" depth="0.6" 
-            material="color: #8B4513; opacity: 1.0;">
-          </a-box>
+      <button slot="ar-button" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: #3182ce; color: white; border: none; border-radius: 8px; font-size: 16px;">
+        部屋に配置する（AR起動）
+      </button>
 
-          <a-box 
-            position="0 0.35 0.65" 
-            width="1.0" height="0.7" depth="0.7" 
-            material="color: #E53E3E; opacity: 0.4; transparent: true;">
-          </a-box>
-          
-        </a-entity>
+    </model-viewer>
 
-      </a-marker>
-
-      <a-entity camera></a-entity>
-    </a-scene>
   </body>
 </html>
