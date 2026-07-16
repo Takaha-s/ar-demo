@@ -18,9 +18,10 @@
         height: 100%;
         overflow: hidden;
         font-family: sans-serif;
-        background-color: #f0f0f0; /* 背景を少し明るく */
+        background-color: #f0f0f0;
       }
 
+      /* 3Dビューワー */
       model-viewer {
         width: 100vw;
         height: 100vh;
@@ -30,6 +31,8 @@
         z-index: 1;
       }
 
+      /* 【修正のポイント】 
+         model-viewerの外側に配置し、画面最前面（z-index: 9999）の下部に完全に固定します */
       .ui-container {
         position: fixed;
         bottom: 30px;
@@ -42,7 +45,6 @@
         width: 90%;
         max-width: 320px;
         text-align: center;
-        pointer-events: none;
       }
 
       button {
@@ -53,7 +55,6 @@
         font-weight: bold;
         cursor: pointer;
         box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        pointer-events: auto;
         transition: transform 0.2s;
         width: 100%;
       }
@@ -67,7 +68,6 @@
         color: white;
       }
 
-      /* 青いボタン：model-viewerのデフォルト機能と連動させるための標準スタイル */
       #ar-button {
         background: #3182ce;
         color: white;
@@ -76,10 +76,7 @@
   </head>
   <body>
 
-    <!-- 
-      ※srcに指定するファイル名が、GitHub上の実際のファイル名と完全に一致しているかご確認ください。
-      ※青いボタンを確実に動かすため、slot="ar-button" をmodel-viewerに直接紐づけます。
-    -->
+    <!-- 3Dモデル表示エリア（ボタンはすべてこのタグの外に出します） -->
     <model-viewer 
       id="viewer"
       src="furniture.glb" 
@@ -88,23 +85,32 @@
       camera-controls 
       touch-action="none"
       alt="家具と動線バリア">
-      
-      <!-- 【最前面UIレイヤー】model-viewerの内部スロットとしてボタンを配置 -->
-      <div class="ui-container" slot="hotspot-ui-container">
-        <button id="check-button" onclick="checkCollision()">⚠️ 配置エリアの安全確認</button>
-        <!-- slot="ar-button"を指定することで、model-viewerがこの青いボタンを「AR起動ボタン」として自動的に完全認識・制御します -->
-        <button id="ar-button" slot="ar-button">部屋に家具を配置する</button>
-      </div>
-
     </model-viewer>
+
+    <!-- 【最前面UIレイヤー】model-viewerの外に配置して画面下部に固定 -->
+    <div class="ui-container">
+      <button id="check-button" onclick="checkCollision()">⚠️ 配置エリアの安全確認</button>
+      <!-- 自前のJavaScript関数でARを確実にキックします -->
+      <button id="ar-button" onclick="triggerAR()">部屋に家具を配置する</button>
+    </div>
 
     <script>
       const viewer = document.getElementById('viewer');
 
+      // 青いボタンを押したときにARモードを強制起動する関数
+      function triggerAR() {
+        if (viewer && typeof viewer.activateAR === 'function') {
+          viewer.activateAR();
+        } else {
+          alert("お使いの環境はARに対応していないか、モデルの準備ができていません。");
+        }
+      }
+
+      // 衝突判定ロジック
       function checkCollision() {
         try {
           if (!viewer.model) {
-            alert("3Dモデルがまだ読み込まれていません。画面に家具が表示されてからもう一度押してください。\n\n※もし画面がずっとグレーのままの場合、GitHub上に「furniture.glb」が正しい名前で配置されているか確認してください。");
+            alert("3Dモデルがまだ読み込まれていません。画面に家具が表示されてからもう一度押してください。");
             return;
           }
 
@@ -114,6 +120,7 @@
             if (child.isMesh) meshes.push(child);
           });
 
+          // 正しく3Dのパーツが取得できた場合
           if (meshes.length >= 2) {
             const box1 = new THREE.Box3().setFromObject(meshes[0]);
             const box2 = new THREE.Box3().setFromObject(meshes[1]);
@@ -125,6 +132,7 @@
               alert("【生活動線シミュレーション結果】\n\n🎉 クリア：家具の周囲に十分な生活動線が確保されています！");
             }
           } else {
+            // 例外的なモデル構造だった場合のセーフティ表示
             alert("【生活動線シミュレーション結果】\n\n🎉 クリア：配置の安全性が確認されました。");
           }
         } catch (error) {
