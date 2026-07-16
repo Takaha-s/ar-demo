@@ -2,143 +2,197 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>家具配置・衝突検知AR</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>全自動・リアルタイム動線シミュレータ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     
-    <!-- Three.js CDN -->
+    <!-- WebXR対応のThree.jsとGLTFLoaderを読み込み -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Model-viewer ライブラリ -->
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     
     <style>
-      html, body {
+      body {
         margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
         overflow: hidden;
         font-family: sans-serif;
-        background-color: #f0f0f0;
+        background-color: #111;
       }
 
-      /* 3Dビューワー */
-      model-viewer {
-        width: 100vw;
-        height: 100vh;
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: 1;
-      }
-
-      /* 【修正のポイント】 
-         model-viewerの外側に配置し、画面最前面（z-index: 9999）の下部に完全に固定します */
-      .ui-container {
+      /* 画面上にリアルタイムで表示する自動警告メッセージ */
+      #alert-overlay {
         position: fixed;
-        bottom: 30px;
+        top: 40px;
         left: 50%;
         transform: translateX(-50%);
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        width: 90%;
-        max-width: 320px;
+        width: 85%;
+        max-width: 340px;
+        padding: 15px;
+        border-radius: 12px;
         text-align: center;
-      }
-
-      button {
-        padding: 14px 20px;
-        border: none;
-        border-radius: 10px;
         font-size: 16px;
         font-weight: bold;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        transition: transform 0.2s;
-        width: 100%;
+        z-index: 9999;
+        display: none; /* 初期状態は非表示 */
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        pointer-events: none;
       }
 
-      button:active {
-        transform: scale(0.95);
-      }
-
-      #check-button {
-        background: #e53e3e;
+      /* 安全時のメッセージ */
+      .status-safe {
+        background-color: rgba(76, 175, 80, 0.9); /* 緑 */
         color: white;
+        border: 2px solid #2e7d32;
       }
 
-      #ar-button {
+      /* 警告時のメッセージ */
+      .status-danger {
+        background-color: rgba(211, 47, 47, 0.9); /* 赤 */
+        color: white;
+        border: 2px solid #c62828;
+        animation: pulse 1s infinite alternate;
+      }
+
+      @keyframes pulse {
+        from { transform: translateX(-50%) scale(1); }
+        to { transform: translateX(-50%) scale(1.03); }
+      }
+
+      /* 開始前の画面 */
+      #start-screen {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        text-align: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      #start-btn {
+        padding: 15px 40px;
+        font-size: 18px;
+        font-weight: bold;
         background: #3182ce;
         color: white;
+        border: none;
+        border-radius: 30px;
+        cursor: pointer;
+        margin-top: 20px;
+        box-shadow: 0 4px 15px rgba(49,130,206,0.4);
       }
     </style>
   </head>
   <body>
 
-    <!-- 3Dモデル表示エリア（ボタンはすべてこのタグの外に出します） -->
-    <model-viewer 
-      id="viewer"
-      src="furniture.glb" 
-      ar 
-      ar-modes="webxr scene-viewer quick-look" 
-      camera-controls 
-      touch-action="none"
-      alt="家具と動線バリア">
-    </model-viewer>
+    <!-- アラート表示用オーバーレイ -->
+    <div id="alert-overlay"></div>
 
-    <!-- 【最前面UIレイヤー】model-viewerの外に配置して画面下部に固定 -->
-    <div class="ui-container">
-      <button id="check-button" onclick="checkCollision()">⚠️ 配置エリアの安全確認</button>
-      <!-- 自前のJavaScript関数でARを確実にキックします -->
-      <button id="ar-button" onclick="triggerAR()">部屋に家具を配置する</button>
+    <!-- WebXR起動に必要な、ユーザーからの最初の「1タップ」を得るための開始画面 -->
+    <div id="start-screen">
+      <h2>リアルタイム家具動線 AR</h2>
+      <p style="color: #ccc; font-size: 14px;">画面をタッチすると自動的にカメラが起動し、<br>床を検知して家具と動線エリアを自動設置します。</p>
+      <button id="start-btn">ARを開始する</button>
     </div>
 
     <script>
-      const viewer = document.getElementById('viewer');
+      let scene, camera, renderer, model;
+      let alertOverlay = document.getElementById('alert-overlay');
+      let startScreen = document.getElementById('start-screen');
+      let startBtn = document.getElementById('start-btn');
 
-      // 青いボタンを押したときにARモードを強制起動する関数
-      function triggerAR() {
-        if (viewer && typeof viewer.activateAR === 'function') {
-          viewer.activateAR();
-        } else {
-          alert("お使いの環境はARに対応していないか、モデルの準備ができていません。");
-        }
-      }
+      // 衝突検知用のBoundingBox（境界箱）
+      const box1 = new THREE.Box3();
+      const box2 = new THREE.Box3();
+      const meshes = [];
 
-      // 衝突判定ロジック
-      function checkCollision() {
-        try {
-          if (!viewer.model) {
-            alert("3Dモデルがまだ読み込まれていません。画面に家具が表示されてからもう一度押してください。");
-            return;
-          }
+      startBtn.addEventListener('click', () => {
+        startScreen.style.display = 'none';
+        initAR();
+      });
 
-          const model3D = viewer.model.toObject3D();
-          const meshes = [];
-          model3D.traverse((child) => {
-            if (child.isMesh) meshes.push(child);
-          });
+      function initAR() {
+        // 1. シーン・カメラ・レンダラーの作成
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-          // 正しく3Dのパーツが取得できた場合
-          if (meshes.length >= 2) {
-            const box1 = new THREE.Box3().setFromObject(meshes[0]);
-            const box2 = new THREE.Box3().setFromObject(meshes[1]);
-            const isColliding = box1.intersectsBox(box2);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true; // WebXR（ARカメラ）を有効化
+        document.body.appendChild(renderer.domElement);
 
-            if (isColliding) {
-              alert("【生活動線シミュレーション結果】\n\n⚠️ 警告：家具の周囲に十分な生活スペースが確保できていません！\n動線エリアに障害物があります。");
-            } else {
-              alert("【生活動線シミュレーション結果】\n\n🎉 クリア：家具の周囲に十分な生活動線が確保されています！");
+        // 2. ライトの追加
+        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+        scene.add(light);
+
+        // 3. GLBモデルのロード
+        const loader = new THREE.GLTFLoader();
+        loader.load('furniture.glb', (gltf) => {
+          model = gltf.scene;
+          
+          // モデル全体の初期位置をAR起動時の床（少し前方・下）に配置
+          model.position.set(0, -0.5, -1.2); 
+          scene.add(model);
+
+          // モデルから個別のパーツ（家具と動線）を抽出
+          model.traverse((child) => {
+            if (child.isMesh) {
+              meshes.push(child);
             }
+          });
+        });
+
+        // 4. WebXRセッションの自動開始
+        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+          if (supported) {
+            navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['local-floor'] // 自動的に床を検知して原点を合わせる機能
+            }).then((session) => {
+              renderer.xr.setSession(session);
+              // AR表示中用のリアルタイム処理ループを開始
+              renderer.setAnimationLoop(renderLoop);
+              alertOverlay.style.display = 'block'; // アラートUIをアクティブにする
+            });
           } else {
-            // 例外的なモデル構造だった場合のセーフティ表示
-            alert("【生活動線シミュレーション結果】\n\n🎉 クリア：配置の安全性が確認されました。");
+            alert("お使いの端末またはブラウザはWebXR（AR）に対応していません。ChromeやSafariの最新版でお試しください。");
           }
-        } catch (error) {
-          alert("エラーが発生しました: " + error.message);
-        }
+        });
       }
+
+      // 毎秒60回実行されるリアルタイム・ループ
+      function renderLoop() {
+        // 5. リアルタイム衝突監視
+        if (model && meshes.length >= 2) {
+          // メッシュの現在位置から最新のバウンディングボックスを毎フレーム再計算
+          box1.setFromObject(meshes[0]);
+          box2.setFromObject(meshes[1]);
+
+          const isColliding = box1.intersectsBox(box2);
+
+          // 状態に応じて「全自動」で画面の警告を切り替える
+          if (isColliding) {
+            alertOverlay.className = 'status-danger';
+            alertOverlay.innerHTML = "⚠️ 警告：家具の周囲に十分な生活スペースが確保できていません！<br>動線エリアに障害物があります。";
+          } else {
+            alertOverlay.className = 'status-safe';
+            alertOverlay.innerHTML = "🎉 クリア：家具の周囲に十分な生活動線が確保されています！";
+          }
+        }
+
+        // 3Dシーンの描画更新
+        renderer.render(scene, camera);
+      }
+
+      // 画面のリサイズ処理
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
     </script>
   </body>
 </html>
