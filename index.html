@@ -2,94 +2,86 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>全自動・家具動線シミュレータ</title>
+    <title>家具配置・動線ARシミュレータ</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    
-    <!-- Three.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Model-viewer ライブラリ -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     
     <style>
       html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        font-family: sans-serif;
-        background-color: #f0f0f0;
+        margin: 0; padding: 0; width: 100%; height: 100%;
+        overflow: hidden; font-family: sans-serif; background-color: #f0f0f0;
       }
 
       model-viewer {
-        width: 100vw;
-        height: 100vh;
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: 1;
+        width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1;
       }
 
-      /* 【最前面UI】画面下部に、ボタンではなく「常時監視の状況」を表示するステータスバー */
-      .status-bar {
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-        width: 90%;
-        max-width: 320px;
-        padding: 15px;
-        border-radius: 12px;
-        text-align: center;
-        font-size: 15px;
-        font-weight: bold;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        color: white;
-        transition: background-color 0.5s, border 0.5s;
-        pointer-events: none; /* タップ操作の邪魔をしない */
+      /* UIコンテナを最前面の下部に固定 */
+      .ui-container {
+        position: fixed; bottom: 30px; left: 50%;
+        transform: translateX(-50%); z-index: 9999;
+        display: flex; flex-direction: column; gap: 12px;
+        width: 90%; max-width: 320px;
       }
 
-      /* 安全状態のスタイル */
-      .status-safe {
-        background-color: rgba(46, 125, 50, 0.95); /* 深い緑 */
-        border: 2px solid #1b5e20;
+      button {
+        padding: 14px 20px; border: none; border-radius: 10px;
+        font-size: 16px; font-weight: bold; cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: transform 0.2s;
+        width: 100%;
       }
 
-      /* 警告状態のスタイル */
-      .status-warning {
-        background-color: rgba(198, 40, 40, 0.95); /* 深い赤 */
-        border: 2px solid #b71c1c;
+      button:active { transform: scale(0.95); }
+      #ar-button { background: #3182ce; color: white; }
+      
+      /* バリア切り替え用のスタイリッシュなボタン */
+      #toggle-button {
+        background: #4a5568; color: white;
       }
 
-      /* 自動起動用の見えないARボタン */
-      #ar-trigger {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 10000;
-        background: #3182ce;
+      /* 📌 3D空間に浮かぶ「吹き出し（ホットスポット）」のデザイン */
+      .hotspot {
+        background: #e53e3e;
         color: white;
         border: none;
-        padding: 10px 15px;
-        border-radius: 8px;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
         font-weight: bold;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        font-size: 14px;
         cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* タップした時に出てくるアノテーション（解説板） */
+      .annotation {
+        background: rgba(255, 255, 255, 0.95);
+        color: #2d3748;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: bold;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border: 1px solid #e2e8f0;
+        position: absolute;
+        transform: translate(20px, -20px);
+        width: 160px;
+        text-align: left;
+        pointer-events: none;
+        display: none; /* 最初は隠しておく */
+      }
+
+      /* ピンがクリックされたら解説を表示するクラス */
+      .hotspot.active .annotation {
+        display: block;
       }
     </style>
   </head>
   <body>
 
-    <!-- 画面右上のAR起動用ボタン -->
-    <button id="ar-trigger" onclick="triggerAR()">AR起動</button>
-
-    <!-- 画面中央下部の常時ステータスバー -->
-    <div id="status-display" class="status-bar status-safe">
-      🔄 生活動線を解析中...
-    </div>
-
-    <!-- 3Dモデル表示エリア -->
     <model-viewer 
       id="viewer"
       src="furniture.glb" 
@@ -98,59 +90,64 @@
       camera-controls 
       touch-action="none"
       alt="家具と動線バリア">
+
+      <!-- 📌 3D空間の動線部分に「人間工学ガイド」のピンを浮かび上がらせる -->
+      <!-- position属性でモデルに対する3D位置を指定（適宜モデルに合わせて調整されます） -->
+      <button class="hotspot" slot="hotspot-dimens" data-position="-0.3 0.2 -0.2" onclick="toggleAnnotation(this)">
+        💡
+        <div class="annotation">
+          <strong>【引出し動線の基準】</strong><br>
+          チェストの引き出しを開け、作業するには手前に「約75cm」のスペースが必要です。
+        </div>
+      </button>
+
+      <!-- 画面下部のコントロールUI -->
+      <div class="ui-container" slot="hotspot-ui-container">
+        <!-- バリアの表示・非表示を切り替えるボタン -->
+        <button id="toggle-button" onclick="toggleBarrier()">👁️ 動線バリアを非表示にする</button>
+        <button id="ar-button" slot="ar-button">部屋に家具を配置する</button>
+      </div>
+
     </model-viewer>
 
     <script>
       const viewer = document.getElementById('viewer');
-      const statusDisplay = document.getElementById('status-display');
+      let barrierVisible = true;
 
-      // ARを起動する関数
-      function triggerAR() {
-        if (viewer && typeof viewer.activateAR === 'function') {
-          viewer.activateAR();
-        } else {
-          alert("モデルの準備ができていないか、ARに対応していません。");
-        }
+      // ① 吹き出しのタップで解説を表示/非表示にする
+      function toggleAnnotation(hotspotElement) {
+        hotspotElement.classList.toggle('active');
       }
 
-      // 【ボタンを押さずに全自動化】1.5秒ごとに勝手に衝突を監視し続けるループ
-      setInterval(() => {
+      // ② 動線バリア（赤いパーツ）を瞬時に消す/出す
+      function toggleBarrier() {
         if (!viewer.model) return;
 
-        try {
-          const model3D = viewer.model.toObject3D();
-          const meshes = [];
-          
-          model3D.traverse((child) => {
-            if (child.isMesh) meshes.push(child);
-          });
-
-          // メッシュが2つ（家具本体とバリア）以上ある場合
-          if (meshes.length >= 2) {
-            const box1 = new THREE.Box3().setFromObject(meshes[0]);
-            const box2 = new THREE.Box3().setFromObject(meshes[1]);
-            
-            // 実際に衝突しているか判定
-            const isColliding = box1.intersectsBox(box2);
-
-            if (isColliding) {
-              // ぶつかっている場合：警告モード
-              statusDisplay.className = "status-bar status-warning";
-              statusDisplay.innerHTML = "⚠️ 警告：生活スペース（赤領域）が<br>他のオブジェクトや壁に干渉しています！";
+        const button = document.getElementById('toggle-button');
+        
+        // model-viewerからマテリアルの一覧を取得
+        const materials = viewer.model.materials;
+        
+        // 赤いバリアのマテリアル（色情報）を探して透明度を切り替える
+        // （通常、赤いバリアは透明度が設定されたマテリアルになっています）
+        materials.forEach((material) => {
+          // 赤っぽいマテリアル、または透明（Transparent）に設定されているものをバリアとして自動検知
+          if (material.name.includes("barrier") || material.name.includes("red") || material.pbrMetallicRoughness.baseColorFactor[0] > 0.5) {
+            if (barrierVisible) {
+              // 完全に透明にする（非表示）
+              material.setAlphaMode("BLEND");
+              material.pbrMetallicRoughness.setBaseColorFactor([1, 0, 0, 0.0]); // 透明度を0に
+              button.innerHTML = "👁️ 動線バリアを表示する";
             } else {
-              // 安全な場合：クリアモード
-              statusDisplay.className = "status-bar status-safe";
-              statusDisplay.innerHTML = "🎉 クリア：家具の周囲に<br>十分な生活動線が確保されています！";
+              // 元の半透明に戻す
+              material.pbrMetallicRoughness.setBaseColorFactor([1, 0, 0, 0.4]); // 透明度を40%に
+              button.innerHTML = "👁️ 動線バリアを非表示にする";
             }
-          } else {
-            // 例外的なモデルでも動いていることをアピールするための自動クリア表示
-            statusDisplay.className = "status-bar status-safe";
-            statusDisplay.innerHTML = "🎉 自動解析：最適な配置スペースです";
           }
-        } catch (e) {
-          console.error("自動監視エラー:", e);
-        }
-      }, 1500); // 1.5秒（1500ミリ秒）ごとに全自動実行
+        });
+
+        barrierVisible = !barrierVisible;
+      }
     </script>
   </body>
 </html>
